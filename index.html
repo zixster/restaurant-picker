@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Random Restaurant Picker (Groups + Owner + Tags + Edit)</title>
+  <title>Random Restaurant Picker (Groups + Owner + Tags + People + Edit)</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <style>
     body {
@@ -98,19 +98,20 @@
     #authStatus {
       font-size: 0.85rem;
     }
-    #tagOptions {
+    #tagOptions, #peopleOptions, #filterTagOptions, #filterPeopleOptions {
       margin-top: 0.3rem;
       padding: 0.4rem;
       border-radius: 6px;
       background: #f8f8f8;
     }
-    .tag-option {
+    .tag-option, .person-option {
       display: inline-flex;
       align-items: center;
       margin: 0.1rem 0.4rem 0.1rem 0;
       font-size: 0.8rem;
     }
-    .tag-option input {
+    .tag-option input,
+    .person-option input {
       width: auto;
       margin-right: 0.3rem;
       margin-top: 0;
@@ -173,6 +174,10 @@
         <input type="text" id="peopleInput" placeholder="John, Bob, Roommate">
       </label>
 
+      <div id="peopleOptions" class="small">
+        <!-- people checkboxes will be rendered here -->
+      </div>
+
       <button type="submit" style="margin-top:0.6rem;">Save Restaurant</button>
     </form>
   </div>
@@ -187,11 +192,19 @@
       <input type="text" id="filterPeopleInput" placeholder="John, Bob, Roommate">
     </label>
 
+    <div id="filterPeopleOptions" class="small">
+      <!-- filter people checkboxes -->
+    </div>
+
     <label>
       Required tags (comma separated)
       <span class="small">Example: Italian, takeout</span>
       <input type="text" id="filterTagsInput" placeholder="Italian">
     </label>
+
+    <div id="filterTagOptions" class="small">
+      <!-- filter tag checkboxes -->
+    </div>
 
     <button id="pickBtn" style="margin-top:0.6rem;">🎲 Pick Random Restaurant</button>
     <div id="result"></div>
@@ -248,6 +261,7 @@
     let currentGroupOwnerName = null;
     let restaurants = [];
     let groupTags = [];
+    let groupPeople = [];
     let currentUser = null;
 
     const authStatusEl = document.getElementById('authStatus');
@@ -326,20 +340,36 @@
       }
     }
 
-    function recomputeGroupTags() {
-      const set = new Set();
+    function recomputeGroupTagsAndPeople() {
+      const tagSet = new Set();
+      const peopleSet = new Set();
+
       restaurants.forEach(r => {
         (r.tags || []).forEach(t => {
-          if (t) set.add(t);
+          if (t) tagSet.add(t);
+        });
+        (r.people || []).forEach(p => {
+          if (p) peopleSet.add(p);
         });
       });
-      groupTags = Array.from(set).sort();
+
+      groupTags = Array.from(tagSet).sort();
+      groupPeople = Array.from(peopleSet).sort();
     }
 
     function setTagCheckboxesForTags(tags) {
       const lowerSet = new Set((tags || []).map(t => t.toLowerCase()));
       document
         .querySelectorAll('#tagOptions input[type="checkbox"]')
+        .forEach(cb => {
+          cb.checked = lowerSet.has(cb.value.toLowerCase());
+        });
+    }
+
+    function setPeopleCheckboxesForPeople(people) {
+      const lowerSet = new Set((people || []).map(p => p.toLowerCase()));
+      document
+        .querySelectorAll('#peopleOptions input[type="checkbox"]')
         .forEach(cb => {
           cb.checked = lowerSet.has(cb.value.toLowerCase());
         });
@@ -373,6 +403,102 @@
 
         label.appendChild(checkbox);
         label.appendChild(document.createTextNode(tag));
+        container.appendChild(label);
+      });
+    }
+
+    function renderPeopleOptions() {
+      const container = document.getElementById('peopleOptions');
+      container.innerHTML = '';
+
+      if (!currentGroupId) {
+        container.textContent = 'Select a group to see people.';
+        return;
+      }
+
+      if (groupPeople.length === 0) {
+        container.textContent = 'No people saved yet. Type some names above to start building a list.';
+        return;
+      }
+
+      const info = document.createElement('div');
+      info.textContent = 'People you’ve used in this group (tap to add to this restaurant):';
+      container.appendChild(info);
+
+      groupPeople.forEach(person => {
+        const label = document.createElement('label');
+        label.className = 'person-option';
+
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.value = person;
+
+        label.appendChild(checkbox);
+        label.appendChild(document.createTextNode(person));
+        container.appendChild(label);
+      });
+    }
+
+    function renderFilterTagOptions() {
+      const container = document.getElementById('filterTagOptions');
+      container.innerHTML = '';
+
+      if (!currentGroupId) {
+        container.textContent = 'Select a group to see its tags.';
+        return;
+      }
+
+      if (groupTags.length === 0) {
+        container.textContent = 'No tags in this group yet.';
+        return;
+      }
+
+      const info = document.createElement('div');
+      info.textContent = 'Tap tags to require them when picking:';
+      container.appendChild(info);
+
+      groupTags.forEach(tag => {
+        const label = document.createElement('label');
+        label.className = 'tag-option';
+
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.value = tag;
+
+        label.appendChild(checkbox);
+        label.appendChild(document.createTextNode(tag));
+        container.appendChild(label);
+      });
+    }
+
+    function renderFilterPeopleOptions() {
+      const container = document.getElementById('filterPeopleOptions');
+      container.innerHTML = '';
+
+      if (!currentGroupId) {
+        container.textContent = 'Select a group to see people.';
+        return;
+      }
+
+      if (groupPeople.length === 0) {
+        container.textContent = 'No people saved yet.';
+        return;
+      }
+
+      const info = document.createElement('div');
+      info.textContent = 'Tap who is present:';
+      container.appendChild(info);
+
+      groupPeople.forEach(person => {
+        const label = document.createElement('label');
+        label.className = 'person-option';
+
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.value = person;
+
+        label.appendChild(checkbox);
+        label.appendChild(document.createTextNode(person));
         container.appendChild(label);
       });
     }
@@ -438,6 +564,7 @@
           tagsInput.value = (r.tags || []).join(', ');
           peopleInput.value = (r.people || []).join(', ');
           setTagCheckboxesForTags(r.tags);
+          setPeopleCheckboxesForPeople(r.people);
           document.getElementById('addForm').scrollIntoView({ behavior: 'smooth' });
         });
 
@@ -483,9 +610,13 @@
         currentGroupOwnerName = null;
         restaurants = [];
         groupTags = [];
+        groupPeople = [];
         setCurrentGroupDisplay();
         updateEditHint();
         renderTagOptions();
+        renderPeopleOptions();
+        renderFilterTagOptions();
+        renderFilterPeopleOptions();
         renderList();
         return;
       }
@@ -553,8 +684,11 @@
         }
       }
 
-      recomputeGroupTags();
+      recomputeGroupTagsAndPeople();
       renderTagOptions();
+      renderPeopleOptions();
+      renderFilterTagOptions();
+      renderFilterPeopleOptions();
       renderList();
     }
 
@@ -662,15 +796,18 @@
       if (!name) return;
 
       const typedTags = normalizeList(tagsInput.value);
-
       const checkedTags = Array.from(
         document.querySelectorAll('#tagOptions input[type="checkbox"]:checked')
       ).map(cb => cb.value.toLowerCase());
-
       const tagSet = new Set([...typedTags, ...checkedTags]);
       const tags = Array.from(tagSet);
 
-      const people = normalizeList(peopleInput.value);
+      const typedPeople = normalizeList(peopleInput.value);
+      const checkedPeople = Array.from(
+        document.querySelectorAll('#peopleOptions input[type="checkbox"]:checked')
+      ).map(cb => cb.value.toLowerCase());
+      const peopleSet = new Set([...typedPeople, ...checkedPeople]);
+      const people = Array.from(peopleSet);
 
       await saveRestaurantToFirestore(name, tags, people);
     });
@@ -688,8 +825,17 @@
       const filterPeopleStr = document.getElementById('filterPeopleInput').value;
       const filterTagsStr = document.getElementById('filterTagsInput').value;
 
-      const requiredPeople = normalizeList(filterPeopleStr);
-      const requiredTags = normalizeList(filterTagsStr);
+      const typedFilterPeople = normalizeList(filterPeopleStr);
+      const checkedFilterPeople = Array.from(
+        document.querySelectorAll('#filterPeopleOptions input[type="checkbox"]:checked')
+      ).map(cb => cb.value.toLowerCase());
+      const requiredPeople = Array.from(new Set([...typedFilterPeople, ...checkedFilterPeople]));
+
+      const typedFilterTags = normalizeList(filterTagsStr);
+      const checkedFilterTags = Array.from(
+        document.querySelectorAll('#filterTagOptions input[type="checkbox"]:checked')
+      ).map(cb => cb.value.toLowerCase());
+      const requiredTags = Array.from(new Set([...typedFilterTags, ...checkedFilterTags]));
 
       const eligible = restaurants.filter(r => {
         const rPeople = r.people.map(p => p.toLowerCase());
