@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Random Restaurant Picker (Groups + Owner + Tags + People + Edit)</title>
+  <title>Random Restaurant Picker (Groups + Owner + Tags + People + Edit + Import)</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <style>
     body {
@@ -116,6 +116,18 @@
       margin-right: 0.3rem;
       margin-top: 0;
     }
+    .import-row {
+      border-bottom: 1px solid #eee;
+      padding: 0.5rem 0;
+      font-size: 0.85rem;
+    }
+    .import-header {
+      font-weight: 600;
+      margin-bottom: 0.25rem;
+    }
+    .import-row label {
+      margin-top: 0.2rem;
+    }
   </style>
 </head>
 <body>
@@ -210,6 +222,30 @@
     <div id="result"></div>
   </div>
 
+  <!-- Import from another group -->
+  <div class="section">
+    <h2 style="font-size:1.1rem;margin:0 0 0.5rem;">Import from Another Group</h2>
+    <p class="small">
+      Want to borrow someone else's list without giving them write access? Enter their group ID,
+      load their restaurants, tweak tags/people, and import into your current group.
+    </p>
+    <form id="importForm">
+      <label>
+        Source Group ID (read-only)
+        <span class="small">Example: your-friend-group. You can see it if they tell you.</span>
+        <input type="text" id="importGroupInput" placeholder="friend-group-id" required>
+      </label>
+      <button type="submit" style="margin-top:0.6rem;">Load Restaurants from Source Group</button>
+    </form>
+    <div id="importList" style="margin-top:0.5rem;"></div>
+    <button id="importSelectedBtn" style="margin-top:0.6rem;" disabled>
+      Import Selected into My Current Group
+    </button>
+    <p class="small">
+      Importing makes copies into <strong>your</strong> group only. The source group is never changed.
+    </p>
+  </div>
+
   <!-- List of restaurants -->
   <div class="section">
     <h2 style="font-size:1.1rem;margin:0 0 0.5rem;">Saved Restaurants for This Group</h2>
@@ -264,6 +300,10 @@
     let groupPeople = [];
     let currentUser = null;
 
+    // Import state
+    let importGroupId = null;
+    let importRestaurants = [];
+
     const authStatusEl = document.getElementById('authStatus');
     const signInBtn = document.getElementById('signInBtn');
     const signOutBtn = document.getElementById('signOutBtn');
@@ -272,6 +312,8 @@
     const nameInput = document.getElementById('nameInput');
     const tagsInput = document.getElementById('tagsInput');
     const peopleInput = document.getElementById('peopleInput');
+
+    const importSelectedBtn = document.getElementById('importSelectedBtn');
 
     function normalizeList(str) {
       if (!str) return [];
@@ -604,6 +646,180 @@
       return collection(db, 'groups', currentGroupId, 'restaurants');
     }
 
+    // --- Import helpers ---
+
+    async function loadImportGroupRestaurants(sourceGroupRaw) {
+      const normalized = sourceGroupRaw
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-|-$/g, '');
+      if (!normalized) {
+        importGroupId = null;
+        importRestaurants = [];
+        renderImportList();
+        return;
+      }
+
+      importGroupId = normalized;
+      importRestaurants = [];
+
+      try {
+        const colRef = collection(db, 'groups', importGroupId, 'restaurants');
+        const snap = await getDocs(colRef);
+        importRestaurants = snap.docs.map(docSnap => {
+          const data = docSnap.data();
+          return {
+            id: docSnap.id,
+            name: data.name || '',
+            tags: data.tags || [],
+            people: data.people || []
+          };
+        });
+      } catch (err) {
+        console.error('Error loading import group:', err);
+        importRestaurants = [];
+      }
+
+      renderImportList();
+    }
+
+    function renderImportList() {
+      const listDiv = document.getElementById('importList');
+      listDiv.innerHTML = '';
+
+      if (!importGroupId) {
+        listDiv.textContent = 'Enter a source group ID above and load its restaurants.';
+        importSelectedBtn.disabled = true;
+        return;
+      }
+
+      if (importRestaurants.length === 0) {
+        listDiv.textContent = 'No restaurants found in that source group (or it does not exist).';
+        importSelectedBtn.disabled = true;
+        return;
+      }
+
+      importSelectedBtn.disabled = false;
+
+      const header = document.createElement('div');
+      header.className = 'import-header';
+      header.textContent = `Restaurants in source group: ${importGroupId}`;
+      listDiv.appendChild(header);
+
+      importRestaurants.forEach((r, index) => {
+        const row = document.createElement('div');
+        row.className = 'import-row';
+        row.dataset.index = index;
+
+        const topLine = document.createElement('div');
+        const cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.checked = true;
+        cb.dataset.index = index;
+        cb.style.marginRight = '0.4rem';
+        topLine.appendChild(cb);
+
+        const nameSpan = document.createElement('span');
+        nameSpan.style.fontWeight = '600';
+        nameSpan.textContent = r.name || '(unnamed)';
+        topLine.appendChild(nameSpan);
+
+        row.appendChild(topLine);
+
+        const tagsLabel = document.createElement('label');
+        tagsLabel.textContent = 'Tags (edit before importing):';
+        const tagsInput = document.createElement('input');
+        tagsInput.type = 'text';
+        tagsInput.value = (r.tags || []).join(', ');
+        tagsInput.className = 'import-tags-input';
+        tagsInput.dataset.index = index;
+        tagsLabel.appendChild(tagsInput);
+        row.appendChild(tagsLabel);
+
+        const peopleLabel = document.createElement('label');
+        peopleLabel.textContent = 'People OK with this (edit before importing):';
+        const peopleInput = document.createElement('input');
+        peopleInput.type = 'text';
+        peopleInput.value = (r.people || []).join(', ');
+        peopleInput.className = 'import-people-input';
+        peopleInput.dataset.index = index;
+        peopleLabel.appendChild(peopleInput);
+        row.appendChild(peopleLabel);
+
+        listDiv.appendChild(row);
+      });
+    }
+
+    async function importSelectedRestaurants() {
+      if (!currentGroupId) {
+        alert('Select your own Group ID first (the destination).');
+        return;
+      }
+      if (!hasWriteAccess()) {
+        alert('You must own the current group to import into it.');
+        return;
+      }
+      if (!importGroupId || importRestaurants.length === 0) {
+        alert('Load a source group with restaurants first.');
+        return;
+      }
+
+      const colRef = groupRestaurantsCollection();
+      if (!colRef) {
+        alert('Destination group not available.');
+        return;
+      }
+
+      const rows = document.querySelectorAll('#importList .import-row');
+      const writePromises = [];
+
+      rows.forEach(row => {
+        const index = parseInt(row.dataset.index, 10);
+        if (Number.isNaN(index)) return;
+
+        const cb = row.querySelector('input[type="checkbox"]');
+        if (!cb || !cb.checked) return;
+
+        const base = importRestaurants[index];
+        if (!base || !base.name) return;
+
+        const tagsInputEl = row.querySelector('.import-tags-input');
+        const peopleInputEl = row.querySelector('.import-people-input');
+
+        const name = base.name.trim();
+        if (!name) return;
+
+        const tags = normalizeList(tagsInputEl ? tagsInputEl.value : '');
+        const people = normalizeList(peopleInputEl ? peopleInputEl.value : '');
+
+        const docId = name.toLowerCase()
+          .replace(/[^a-z0-9]+/g, '-')
+          .replace(/^-|-$/g, '') || 'restaurant';
+
+        const destDocRef = doc(colRef, docId);
+
+        writePromises.push(
+          setDoc(destDocRef, { name, tags, people })
+        );
+      });
+
+      if (writePromises.length === 0) {
+        alert('No restaurants selected to import.');
+        return;
+      }
+
+      try {
+        await Promise.all(writePromises);
+        await loadGroupAndRestaurants();
+        alert('Imported selected restaurants into your current group.');
+      } catch (err) {
+        console.error('Error importing restaurants:', err);
+        alert('Something went wrong during import. Check console for details.');
+      }
+    }
+
+    // --- Load group + restaurants ---
+
     async function loadGroupAndRestaurants() {
       if (!currentGroupId) {
         currentGroupOwnerUid = null;
@@ -812,6 +1028,25 @@
       await saveRestaurantToFirestore(name, tags, people);
     });
 
+    // --- Import form ---
+
+    document.getElementById('importForm').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const input = document.getElementById('importGroupInput');
+      const srcRaw = input.value.trim();
+      if (!srcRaw) {
+        importGroupId = null;
+        importRestaurants = [];
+        renderImportList();
+        return;
+      }
+      await loadImportGroupRestaurants(srcRaw);
+    });
+
+    importSelectedBtn.addEventListener('click', async () => {
+      await importSelectedRestaurants();
+    });
+
     // --- Random picker ---
 
     document.getElementById('pickBtn').addEventListener('click', () => {
@@ -874,6 +1109,7 @@
       setCurrentGroupDisplay();
       updateEditHint();
       await loadGroupAndRestaurants();
+      renderImportList();
     })();
   </script>
 </body>
