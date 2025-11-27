@@ -1,9 +1,8 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Random Restaurant Picker</title>
+  <title>Random Restaurant Picker (Firebase)</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <style>
     body {
@@ -75,14 +74,35 @@
       text-align: center;
       margin-top: 0.5rem;
     }
+    #currentGroupDisplay {
+      font-size: 0.85rem;
+      color: #333;
+      margin-top: 0.3rem;
+    }
   </style>
 </head>
 <body>
   <h1>Random Restaurant Picker</h1>
 
+  <!-- Group / Family selection -->
+  <div class="section">
+    <h2 style="font-size:1.1rem;margin:0 0 0.5rem;">Group / Family</h2>
+    <form id="groupForm">
+      <label>
+        Group ID (e.g. stewart-family)
+        <span class="small">
+          Everyone using the same Group ID shares the same restaurant list.
+        </span>
+        <input type="text" id="groupInput" placeholder="stewart-family" required>
+      </label>
+      <button type="submit" style="margin-top:0.6rem;">Use this Group</button>
+    </form>
+    <div id="currentGroupDisplay"></div>
+  </div>
+
   <!-- Add restaurant -->
   <div class="section">
-    <h2 style="font-size:1.1rem;margin:0 0 0.5rem;">Add Restaurant</h2>
+    <h2 style="font-size:1.1rem;margin:0 0 0.5rem;">Add / Update Restaurant</h2>
     <form id="addForm">
       <label>
         Restaurant name:
@@ -101,7 +121,7 @@
         <input type="text" id="peopleInput" placeholder="John, Kristin">
       </label>
 
-      <button type="submit" style="margin-top:0.6rem;">Add / Update Restaurant</button>
+      <button type="submit" style="margin-top:0.6rem;">Save Restaurant</button>
     </form>
   </div>
 
@@ -127,29 +147,44 @@
 
   <!-- List of restaurants -->
   <div class="section">
-    <h2 style="font-size:1.1rem;margin:0 0 0.5rem;">Saved Restaurants</h2>
+    <h2 style="font-size:1.1rem;margin:0 0 0.5rem;">Saved Restaurants for This Group</h2>
     <div id="list"></div>
-    <p class="small">Data is stored locally on this device using localStorage.</p>
+    <p class="small">
+      Data is stored in Firebase Firestore, per Group ID.
+      Anyone with the same Group ID sees the same list.
+    </p>
   </div>
 
-  <script>
-    const STORAGE_KEY = 'restaurantPicker_v1';
+  <!-- Firebase + app logic -->
+  <script type="module">
+    // Import Firebase from CDN (modular SDK) :contentReference[oaicite:2]{index=2}
+    import { initializeApp } from 'https://www.gstatic.com/firebasejs/12.6.0/firebase-app.js';
+    import {
+      getFirestore,
+      collection,
+      doc,
+      setDoc,
+      getDocs,
+      deleteDoc
+    } from 'https://www.gstatic.com/firebasejs/12.6.0/firebase-firestore.js';
 
-    let restaurants = [];
+    const firebaseConfig = {
+      apiKey: "AIzaSyC2xQS-opDsHikzS2DQyCZ7MNIlquENrPY",
+      authDomain: "restaurant-picker-82bfa.firebaseapp.com",
+      projectId: "restaurant-picker-82bfa",
+      storageBucket: "restaurant-picker-82bfa.firebasestorage.app",
+      messagingSenderId: "1000330063502",
+      appId: "1:1000330063502:web:a307f6354e0fee2960a3df"
+    };
 
-    function loadRestaurants() {
-      try {
-        const raw = localStorage.getItem(STORAGE_KEY);
-        restaurants = raw ? JSON.parse(raw) : [];
-      } catch (e) {
-        console.error('Failed to load restaurants', e);
-        restaurants = [];
-      }
-    }
 
-    function saveRestaurants() {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(restaurants));
-    }
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    let currentGroupId = null;
+    let restaurants = []; // in-memory cache for current group
+
+    // --- Helpers ---
 
     function normalizeList(str) {
       if (!str) return [];
@@ -160,16 +195,30 @@
         .map(s => s.toLowerCase());
     }
 
+    function setCurrentGroupDisplay() {
+      const div = document.getElementById('currentGroupDisplay');
+      if (!currentGroupId) {
+        div.textContent = 'No group selected yet.';
+      } else {
+        div.textContent = 'Current group: ' + currentGroupId;
+      }
+    }
+
     function renderList() {
       const listDiv = document.getElementById('list');
       listDiv.innerHTML = '';
 
-      if (restaurants.length === 0) {
-        listDiv.textContent = 'No restaurants saved yet.';
+      if (!currentGroupId) {
+        listDiv.textContent = 'Select a Group ID above to see its restaurants.';
         return;
       }
 
-      restaurants.forEach((r, index) => {
+      if (restaurants.length === 0) {
+        listDiv.textContent = 'No restaurants saved yet for this group.';
+        return;
+      }
+
+      restaurants.forEach((r) => {
         const item = document.createElement('div');
         item.className = 'restaurant-item';
 
@@ -199,10 +248,8 @@
         const delBtn = document.createElement('button');
         delBtn.textContent = 'Delete';
         delBtn.className = 'delete-btn';
-        delBtn.addEventListener('click', () => {
-          restaurants.splice(index, 1);
-          saveRestaurants();
-          renderList();
+        delBtn.addEventListener('click', async () => {
+          await deleteRestaurant(r.id);
         });
         item.appendChild(delBtn);
 
@@ -210,8 +257,93 @@
       });
     }
 
-    function addOrUpdateRestaurant(event) {
+    // --- Firestore functions ---
+
+    function groupRestaurantsCollection() {
+      if (!currentGroupId) return null;
+      return collection(db, 'groups', currentGroupId, 'restaurants');
+    }
+
+    async function loadRestaurantsFromFirestore() {
+      if (!currentGroupId) {
+        restaurants = [];
+        renderList();
+        return;
+      }
+
+      const colRef = groupRestaurantsCollection();
+      const snap = await getDocs(colRef);
+
+      restaurants = snap.docs.map(docSnap => {
+        const data = docSnap.data();
+        return {
+          id: docSnap.id,
+          name: data.name || '',
+          tags: data.tags || [],
+          people: data.people || []
+        };
+      });
+
+      renderList();
+    }
+
+    async function saveRestaurantToFirestore(name, tags, people) {
+      const colRef = groupRestaurantsCollection();
+      if (!colRef) {
+        alert('Select a Group ID first.');
+        return;
+      }
+
+      // Use deterministic ID based on name (case-insensitive) to support "update by name"
+      const docId = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'restaurant';
+
+      const docRef = doc(colRef, docId);
+
+      await setDoc(docRef, {
+        name,
+        tags,
+        people
+      });
+
+      await loadRestaurantsFromFirestore();
+    }
+
+    async function deleteRestaurant(id) {
+      const colRef = groupRestaurantsCollection();
+      if (!colRef) return;
+      const docRef = doc(colRef, id);
+      await deleteDoc(docRef);
+      await loadRestaurantsFromFirestore();
+    }
+
+    // --- Event handlers ---
+
+    document.getElementById('groupForm').addEventListener('submit', async (event) => {
       event.preventDefault();
+      const input = document.getElementById('groupInput');
+      const groupIdRaw = input.value.trim();
+      if (!groupIdRaw) return;
+
+      // Normalize: lowercase, no spaces, simple slug
+      currentGroupId = groupIdRaw
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-|-$/g, '');
+
+      // Optionally remember on this device
+      localStorage.setItem('rrp_currentGroupId', currentGroupId);
+
+      setCurrentGroupDisplay();
+      await loadRestaurantsFromFirestore();
+    });
+
+    document.getElementById('addForm').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      if (!currentGroupId) {
+        alert('Select a Group ID first.');
+        return;
+      }
+
       const nameInput = document.getElementById('nameInput');
       const tagsInput = document.getElementById('tagsInput');
       const peopleInput = document.getElementById('peopleInput');
@@ -222,30 +354,21 @@
       const tags = normalizeList(tagsInput.value);
       const people = normalizeList(peopleInput.value);
 
-      // Check if restaurant with this name already exists (case-insensitive)
-      const existingIndex = restaurants.findIndex(
-        r => r.name.toLowerCase() === name.toLowerCase()
-      );
+      await saveRestaurantToFirestore(name, tags, people);
 
-      const restaurantObj = { name, tags, people };
+      nameInput.value = '';
+    });
 
-      if (existingIndex >= 0) {
-        restaurants[existingIndex] = restaurantObj;
-      } else {
-        restaurants.push(restaurantObj);
+    document.getElementById('pickBtn').addEventListener('click', () => {
+      const resultDiv = document.getElementById('result');
+
+      if (!currentGroupId) {
+        resultDiv.textContent = 'Select a Group ID first.';
+        return;
       }
 
-      saveRestaurants();
-      renderList();
-
-      // Clear only name field? Up to you. I'll leave tags/people so you can reuse.
-      nameInput.value = '';
-    }
-
-    function pickRandom() {
       const filterPeopleStr = document.getElementById('filterPeopleInput').value;
       const filterTagsStr = document.getElementById('filterTagsInput').value;
-      const resultDiv = document.getElementById('result');
 
       const requiredPeople = normalizeList(filterPeopleStr);
       const requiredTags = normalizeList(filterTagsStr);
@@ -254,12 +377,10 @@
         const rPeople = r.people.map(p => p.toLowerCase());
         const rTags = r.tags.map(t => t.toLowerCase());
 
-        // Everyone present must be in r.people (or r.people empty means "anyone ok")
         const peopleOK =
           requiredPeople.length === 0 ||
           requiredPeople.every(p => rPeople.includes(p) || rPeople.length === 0);
 
-        // Every required tag must be in restaurant tags
         const tagsOK =
           requiredTags.length === 0 ||
           requiredTags.every(t => rTags.includes(t));
@@ -276,15 +397,22 @@
       const chosen = eligible[i];
 
       resultDiv.textContent = '🎉 Tonight you\'re going to: ' + chosen.name;
-    }
+    });
 
-    // Wiring things up
-    document.getElementById('addForm').addEventListener('submit', addOrUpdateRestaurant);
-    document.getElementById('pickBtn').addEventListener('click', pickRandom);
+    // --- On page load: restore last group (if any) ---
 
-    // Initial load
-    loadRestaurants();
-    renderList();
+    (async function init() {
+      const savedGroup = localStorage.getItem('rrp_currentGroupId');
+      if (savedGroup) {
+        currentGroupId = savedGroup;
+        document.getElementById('groupInput').value = savedGroup;
+        setCurrentGroupDisplay();
+        await loadRestaurantsFromFirestore();
+      } else {
+        setCurrentGroupDisplay();
+        renderList();
+      }
+    })();
   </script>
 </body>
 </html>
