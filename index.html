@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Random Restaurant Picker (Firebase)</title>
+  <title>Random Restaurant Picker (Groups + Owner)</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <style>
     body {
@@ -26,7 +26,7 @@
       font-size: 0.9rem;
       margin-top: 0.4rem;
     }
-    input, textarea, button {
+    input, button {
       width: 100%;
       box-sizing: border-box;
       margin-top: 0.2rem;
@@ -103,18 +103,19 @@
     <div class="auth-row">
       <button id="signInBtn">Sign in with Google</button>
       <button id="signOutBtn" disabled>Sign out</button>
-      <span id="authStatus">Not signed in. You can view lists but must sign in to edit.</span>
+      <span id="authStatus">Not signed in. You can view lists but must sign in to create and edit your own groups.</span>
     </div>
   </div>
 
   <!-- Group / Family selection -->
   <div class="section">
-    <h2 style="font-size:1.1rem;margin:0 0 0.5rem;">Group / Family</h2>
+    <h2 style="font-size:1.1rem;margin:0 0 0.5rem;">Group / List</h2>
     <form id="groupForm">
       <label>
-        Group ID (e.g. stewart-family)
+        Group ID (e.g. My Stuff)
         <span class="small">
-          Everyone using the same Group ID shares the same restaurant list.
+          Everyone using the same Group ID shares the same list.
+          The first signed-in person to use a new ID becomes its owner.
         </span>
         <input type="text" id="groupInput" placeholder="stewart-family" required>
       </label>
@@ -141,8 +142,8 @@
 
       <label>
         People who are ok with this (comma separated)
-        <span class="small">Example: John, Kristin, Roommate</span>
-        <input type="text" id="peopleInput" placeholder="John, Kristin">
+        <span class="small">Example: John, Bob, Roommate 1</span>
+        <input type="text" id="peopleInput" placeholder="John, Bob, Roommate">
       </label>
 
       <button type="submit" style="margin-top:0.6rem;">Save Restaurant</button>
@@ -156,7 +157,7 @@
     <label>
       People present (comma separated)
       <span class="small">Only show places everyone here is ok with</span>
-      <input type="text" id="filterPeopleInput" placeholder="John, Kristin">
+      <input type="text" id="filterPeopleInput" placeholder="John, Bob, Roommate">
     </label>
 
     <label>
@@ -175,7 +176,7 @@
     <div id="list"></div>
     <p class="small">
       Data is stored in Firebase Firestore, per Group ID.
-      Anyone with the link can view; only signed-in users can edit.
+      Anyone can view any group if they know its name. Only the group owner can edit that group.
     </p>
   </div>
 
@@ -189,7 +190,8 @@
       doc,
       setDoc,
       getDocs,
-      deleteDoc
+      deleteDoc,
+      getDoc
     } from 'https://www.gstatic.com/firebasejs/12.6.0/firebase-firestore.js';
     import {
       getAuth,
@@ -207,7 +209,6 @@
       messagingSenderId: "1000330063502",
       appId: "1:1000330063502:web:a307f6354e0fee2960a3df"
     };
-    
 
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
@@ -215,15 +216,15 @@
     const provider = new GoogleAuthProvider();
 
     let currentGroupId = null;
-    let restaurants = []; // in-memory cache for current group
+    let currentGroupOwnerUid = null;
+    let currentGroupOwnerName = null;
+    let restaurants = [];
     let currentUser = null;
 
     const authStatusEl = document.getElementById('authStatus');
     const signInBtn = document.getElementById('signInBtn');
     const signOutBtn = document.getElementById('signOutBtn');
     const editHintEl = document.getElementById('editHint');
-
-    // --- Helpers ---
 
     function normalizeList(str) {
       if (!str) return [];
@@ -234,20 +235,61 @@
         .map(s => s.toLowerCase());
     }
 
-    function setCurrentGroupDisplay() {
+    function hasWriteAccess() {
+      return (
+        currentUser &&
+        currentGroupOwnerUid &&
+        currentUser.uid === currentGroupOwnerUid
+      );
+    }
+
+    function setCurrentGroupDisplay(extraMessage = '') {
       const div = document.getElementById('currentGroupDisplay');
+
       if (!currentGroupId) {
         div.textContent = 'No group selected yet.';
-      } else {
-        div.textContent = 'Current group: ' + currentGroupId;
+        return;
       }
+
+      let text = `Current group: ${currentGroupId}`;
+      if (currentGroupOwnerUid) {
+        if (currentUser && currentUser.uid === currentGroupOwnerUid) {
+          text += ' (You own this group)';
+        } else if (currentGroupOwnerName) {
+          text += ` (Owner: ${currentGroupOwnerName})`;
+        } else {
+          text += ' (Owner unknown)';
+        }
+      } else {
+        text += ' (This group does not exist yet.)';
+      }
+
+      if (extraMessage) {
+        text += ' — ' + extraMessage;
+      }
+
+      div.textContent = text;
     }
 
     function updateEditHint() {
-      if (!currentUser) {
-        editHintEl.textContent = 'You are not signed in. You can still view restaurants, but must sign in to add or delete.';
+      if (!currentGroupId) {
+        editHintEl.textContent = 'Select or create a group to view and edit restaurants.';
+        return;
+      }
+
+      if (!currentGroupOwnerUid) {
+        if (!currentUser) {
+          editHintEl.textContent = 'This group does not exist yet. Sign in and press "Use this Group" again to create it and become the owner.';
+        } else {
+          editHintEl.textContent = 'Creating this group for you as owner...';
+        }
+        return;
+      }
+
+      if (hasWriteAccess()) {
+        editHintEl.textContent = 'You own this group. You can add and delete restaurants.';
       } else {
-        editHintEl.textContent = 'Signed in as ' + (currentUser.displayName || currentUser.email) + '. You can add or delete restaurants.';
+        editHintEl.textContent = 'This group is read-only for you. You can view and pick, but only the owner can edit.';
       }
     }
 
@@ -295,12 +337,14 @@
         const delBtn = document.createElement('button');
         delBtn.textContent = 'Delete';
         delBtn.className = 'delete-btn';
-        delBtn.disabled = !currentUser;
-        delBtn.title = currentUser ? 'Delete this restaurant' : 'Sign in to delete';
+        delBtn.disabled = !hasWriteAccess();
+        delBtn.title = hasWriteAccess()
+          ? 'Delete this restaurant'
+          : 'Only the group owner can delete restaurants';
 
         delBtn.addEventListener('click', async () => {
-          if (!currentUser) {
-            alert('You must be signed in to delete.');
+          if (!hasWriteAccess()) {
+            alert('You do not own this group, so you cannot delete restaurants.');
             return;
           }
           await deleteRestaurant(r.id);
@@ -312,39 +356,96 @@
       });
     }
 
-    // --- Firestore functions ---
+    function groupDocRef() {
+      if (!currentGroupId) return null;
+      return doc(db, 'groups', currentGroupId);
+    }
 
     function groupRestaurantsCollection() {
       if (!currentGroupId) return null;
       return collection(db, 'groups', currentGroupId, 'restaurants');
     }
 
-    async function loadRestaurantsFromFirestore() {
+    async function loadGroupAndRestaurants() {
       if (!currentGroupId) {
+        currentGroupOwnerUid = null;
+        currentGroupOwnerName = null;
         restaurants = [];
+        setCurrentGroupDisplay();
+        updateEditHint();
         renderList();
         return;
       }
 
-      const colRef = groupRestaurantsCollection();
-      const snap = await getDocs(colRef);
+      const gRef = groupDocRef();
+      let groupExists = false;
 
-      restaurants = snap.docs.map(docSnap => {
-        const data = docSnap.data();
-        return {
-          id: docSnap.id,
-          name: data.name || '',
-          tags: data.tags || [],
-          people: data.people || []
-        };
-      });
+      try {
+        const gSnap = await getDoc(gRef);
+        if (gSnap.exists()) {
+          groupExists = true;
+          const data = gSnap.data();
+          currentGroupOwnerUid = data.ownerUid || null;
+          currentGroupOwnerName = data.ownerName || null;
+        } else {
+          currentGroupOwnerUid = null;
+          currentGroupOwnerName = null;
+        }
+      } catch (err) {
+        console.error('Error loading group:', err);
+        currentGroupOwnerUid = null;
+        currentGroupOwnerName = null;
+      }
+
+      // If group does not exist and user is signed in, create group with them as owner
+      if (!groupExists && currentUser) {
+        try {
+          const ownerName = currentUser.displayName || currentUser.email || 'Unknown';
+          await setDoc(gRef, {
+            ownerUid: currentUser.uid,
+            ownerName: ownerName
+          });
+          currentGroupOwnerUid = currentUser.uid;
+          currentGroupOwnerName = ownerName;
+        } catch (err) {
+          console.error('Error creating group:', err);
+        }
+      }
+
+      setCurrentGroupDisplay(
+        !groupExists && !currentUser
+          ? 'This group does not exist yet. Sign in and select it again to create it.'
+          : ''
+      );
+
+      updateEditHint();
+
+      // Load restaurants (even if group doesn't exist yet; will just be empty)
+      restaurants = [];
+      const colRef = groupRestaurantsCollection();
+      if (colRef) {
+        try {
+          const snap = await getDocs(colRef);
+          restaurants = snap.docs.map(docSnap => {
+            const data = docSnap.data();
+            return {
+              id: docSnap.id,
+              name: data.name || '',
+              tags: data.tags || [],
+              people: data.people || []
+            };
+          });
+        } catch (err) {
+          console.error('Error loading restaurants:', err);
+        }
+      }
 
       renderList();
     }
 
     async function saveRestaurantToFirestore(name, tags, people) {
-      if (!currentUser) {
-        alert('You must be signed in to add or update restaurants.');
+      if (!hasWriteAccess()) {
+        alert('You do not own this group, so you cannot add or update restaurants.');
         return;
       }
 
@@ -354,8 +455,9 @@
         return;
       }
 
-      // Use deterministic ID based on name (case-insensitive) to support "update by name"
-      const docId = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'restaurant';
+      const docId = name.toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-|-$/g, '') || 'restaurant';
 
       const docRef = doc(colRef, docId);
 
@@ -365,19 +467,19 @@
         people
       });
 
-      await loadRestaurantsFromFirestore();
+      await loadGroupAndRestaurants();
     }
 
     async function deleteRestaurant(id) {
-      if (!currentUser) {
-        alert('You must be signed in to delete restaurants.');
+      if (!hasWriteAccess()) {
+        alert('You do not own this group, so you cannot delete restaurants.');
         return;
       }
       const colRef = groupRestaurantsCollection();
       if (!colRef) return;
       const docRef = doc(colRef, id);
       await deleteDoc(docRef);
-      await loadRestaurantsFromFirestore();
+      await loadGroupAndRestaurants();
     }
 
     // --- Auth handlers ---
@@ -385,7 +487,6 @@
     signInBtn.addEventListener('click', async () => {
       try {
         await signInWithPopup(auth, provider);
-        // onAuthStateChanged will handle UI updates
       } catch (err) {
         console.error('Sign-in error:', err);
         alert('Sign-in failed: ' + (err.message || err));
@@ -400,19 +501,20 @@
       }
     });
 
-    onAuthStateChanged(auth, (user) => {
+    onAuthStateChanged(auth, async (user) => {
       currentUser = user;
       if (user) {
         authStatusEl.textContent = 'Signed in as ' + (user.displayName || user.email);
         signInBtn.disabled = true;
         signOutBtn.disabled = false;
       } else {
-        authStatusEl.textContent = 'Not signed in. You can view lists but must sign in to edit.';
+        authStatusEl.textContent = 'Not signed in. You can view any group, but must sign in to create or edit your own.';
         signInBtn.disabled = false;
         signOutBtn.disabled = true;
       }
       updateEditHint();
-      renderList(); // refresh delete button enabled/disabled state
+      // Reload current group so ownership info is up to date relative to new user
+      await loadGroupAndRestaurants();
     });
 
     // --- Group selection ---
@@ -423,7 +525,6 @@
       const groupIdRaw = input.value.trim();
       if (!groupIdRaw) return;
 
-      // Normalize: lowercase, no spaces, simple slug
       currentGroupId = groupIdRaw
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, '-')
@@ -431,8 +532,7 @@
 
       localStorage.setItem('rrp_currentGroupId', currentGroupId);
 
-      setCurrentGroupDisplay();
-      await loadRestaurantsFromFirestore();
+      await loadGroupAndRestaurants();
     });
 
     // --- Add restaurant form ---
@@ -510,7 +610,7 @@
       }
       setCurrentGroupDisplay();
       updateEditHint();
-      await loadRestaurantsFromFirestore();
+      await loadGroupAndRestaurants();
     })();
   </script>
 </body>
