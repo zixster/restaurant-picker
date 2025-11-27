@@ -1,1 +1,290 @@
 
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Random Restaurant Picker</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      margin: 0;
+      padding: 1rem;
+    }
+    h1 {
+      font-size: 1.4rem;
+      text-align: center;
+      margin-bottom: 0.5rem;
+    }
+    .section {
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      padding: 0.75rem;
+      margin-bottom: 1rem;
+    }
+    label {
+      display: block;
+      font-size: 0.9rem;
+      margin-top: 0.4rem;
+    }
+    input, textarea, button {
+      width: 100%;
+      box-sizing: border-box;
+      margin-top: 0.2rem;
+      padding: 0.4rem;
+      font-size: 1rem;
+    }
+    button {
+      cursor: pointer;
+    }
+    .small {
+      font-size: 0.8rem;
+      color: #555;
+    }
+    .badge {
+      display: inline-block;
+      background: #eee;
+      border-radius: 999px;
+      padding: 0.1rem 0.5rem;
+      margin: 0.05rem;
+      font-size: 0.75rem;
+    }
+    .restaurant-item {
+      padding: 0.3rem 0;
+      border-bottom: 1px solid #eee;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.9rem;
+    }
+    .restaurant-item:last-child {
+      border-bottom: none;
+    }
+    .restaurant-name {
+      font-weight: 600;
+    }
+    .delete-btn {
+      width: auto;
+      padding: 0.2rem 0.5rem;
+      font-size: 0.75rem;
+    }
+    #result {
+      font-weight: 700;
+      font-size: 1.1rem;
+      text-align: center;
+      margin-top: 0.5rem;
+    }
+  </style>
+</head>
+<body>
+  <h1>Random Restaurant Picker</h1>
+
+  <!-- Add restaurant -->
+  <div class="section">
+    <h2 style="font-size:1.1rem;margin:0 0 0.5rem;">Add Restaurant</h2>
+    <form id="addForm">
+      <label>
+        Restaurant name:
+        <input type="text" id="nameInput" required>
+      </label>
+
+      <label>
+        Tags (comma separated)
+        <span class="small">Example: Italian, cheap, date night</span>
+        <input type="text" id="tagsInput" placeholder="Italian, cheap, date night">
+      </label>
+
+      <label>
+        People who are ok with this (comma separated)
+        <span class="small">Example: John, Kristin, Roommate</span>
+        <input type="text" id="peopleInput" placeholder="John, Kristin">
+      </label>
+
+      <button type="submit" style="margin-top:0.6rem;">Add / Update Restaurant</button>
+    </form>
+  </div>
+
+  <!-- Filters + random pick -->
+  <div class="section">
+    <h2 style="font-size:1.1rem;margin:0 0 0.5rem;">Pick One</h2>
+
+    <label>
+      People present (comma separated)
+      <span class="small">Only show places everyone here is ok with</span>
+      <input type="text" id="filterPeopleInput" placeholder="John, Kristin">
+    </label>
+
+    <label>
+      Required tags (comma separated)
+      <span class="small">Example: Italian, takeout</span>
+      <input type="text" id="filterTagsInput" placeholder="Italian">
+    </label>
+
+    <button id="pickBtn" style="margin-top:0.6rem;">🎲 Pick Random Restaurant</button>
+    <div id="result"></div>
+  </div>
+
+  <!-- List of restaurants -->
+  <div class="section">
+    <h2 style="font-size:1.1rem;margin:0 0 0.5rem;">Saved Restaurants</h2>
+    <div id="list"></div>
+    <p class="small">Data is stored locally on this device using localStorage.</p>
+  </div>
+
+  <script>
+    const STORAGE_KEY = 'restaurantPicker_v1';
+
+    let restaurants = [];
+
+    function loadRestaurants() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        restaurants = raw ? JSON.parse(raw) : [];
+      } catch (e) {
+        console.error('Failed to load restaurants', e);
+        restaurants = [];
+      }
+    }
+
+    function saveRestaurants() {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(restaurants));
+    }
+
+    function normalizeList(str) {
+      if (!str) return [];
+      return str
+        .split(',')
+        .map(s => s.trim())
+        .filter(Boolean)
+        .map(s => s.toLowerCase());
+    }
+
+    function renderList() {
+      const listDiv = document.getElementById('list');
+      listDiv.innerHTML = '';
+
+      if (restaurants.length === 0) {
+        listDiv.textContent = 'No restaurants saved yet.';
+        return;
+      }
+
+      restaurants.forEach((r, index) => {
+        const item = document.createElement('div');
+        item.className = 'restaurant-item';
+
+        const left = document.createElement('div');
+
+        const name = document.createElement('div');
+        name.className = 'restaurant-name';
+        name.textContent = r.name;
+        left.appendChild(name);
+
+        const tagsLine = document.createElement('div');
+        r.tags.forEach(t => {
+          const span = document.createElement('span');
+          span.className = 'badge';
+          span.textContent = t;
+          tagsLine.appendChild(span);
+        });
+        left.appendChild(tagsLine);
+
+        const peopleLine = document.createElement('div');
+        peopleLine.className = 'small';
+        peopleLine.textContent = 'OK for: ' + (r.people.join(', ') || 'Anyone');
+        left.appendChild(peopleLine);
+
+        item.appendChild(left);
+
+        const delBtn = document.createElement('button');
+        delBtn.textContent = 'Delete';
+        delBtn.className = 'delete-btn';
+        delBtn.addEventListener('click', () => {
+          restaurants.splice(index, 1);
+          saveRestaurants();
+          renderList();
+        });
+        item.appendChild(delBtn);
+
+        listDiv.appendChild(item);
+      });
+    }
+
+    function addOrUpdateRestaurant(event) {
+      event.preventDefault();
+      const nameInput = document.getElementById('nameInput');
+      const tagsInput = document.getElementById('tagsInput');
+      const peopleInput = document.getElementById('peopleInput');
+
+      const name = nameInput.value.trim();
+      if (!name) return;
+
+      const tags = normalizeList(tagsInput.value);
+      const people = normalizeList(peopleInput.value);
+
+      // Check if restaurant with this name already exists (case-insensitive)
+      const existingIndex = restaurants.findIndex(
+        r => r.name.toLowerCase() === name.toLowerCase()
+      );
+
+      const restaurantObj = { name, tags, people };
+
+      if (existingIndex >= 0) {
+        restaurants[existingIndex] = restaurantObj;
+      } else {
+        restaurants.push(restaurantObj);
+      }
+
+      saveRestaurants();
+      renderList();
+
+      // Clear only name field? Up to you. I'll leave tags/people so you can reuse.
+      nameInput.value = '';
+    }
+
+    function pickRandom() {
+      const filterPeopleStr = document.getElementById('filterPeopleInput').value;
+      const filterTagsStr = document.getElementById('filterTagsInput').value;
+      const resultDiv = document.getElementById('result');
+
+      const requiredPeople = normalizeList(filterPeopleStr);
+      const requiredTags = normalizeList(filterTagsStr);
+
+      const eligible = restaurants.filter(r => {
+        const rPeople = r.people.map(p => p.toLowerCase());
+        const rTags = r.tags.map(t => t.toLowerCase());
+
+        // Everyone present must be in r.people (or r.people empty means "anyone ok")
+        const peopleOK =
+          requiredPeople.length === 0 ||
+          requiredPeople.every(p => rPeople.includes(p) || rPeople.length === 0);
+
+        // Every required tag must be in restaurant tags
+        const tagsOK =
+          requiredTags.length === 0 ||
+          requiredTags.every(t => rTags.includes(t));
+
+        return peopleOK && tagsOK;
+      });
+
+      if (eligible.length === 0) {
+        resultDiv.textContent = 'No matching restaurants. Maybe broaden your filters?';
+        return;
+      }
+
+      const i = Math.floor(Math.random() * eligible.length);
+      const chosen = eligible[i];
+
+      resultDiv.textContent = '🎉 Tonight you\'re going to: ' + chosen.name;
+    }
+
+    // Wiring things up
+    document.getElementById('addForm').addEventListener('submit', addOrUpdateRestaurant);
+    document.getElementById('pickBtn').addEventListener('click', pickRandom);
+
+    // Initial load
+    loadRestaurants();
+    renderList();
+  </script>
+</body>
+</html>
