@@ -2,89 +2,256 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Random Restaurant Picker (Groups + Owner + Tags + People + Edit + Import)</title>
+  <title>Random Restaurant Picker</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <style>
+    :root {
+      --bg-gradient: radial-gradient(circle at top left, #4f46e5 0, #0f172a 45%, #020617 100%);
+      --card-bg: #0b1220;
+      --card-border: rgba(148, 163, 184, 0.4);
+      --card-shadow: 0 18px 40px rgba(15, 23, 42, 0.9);
+      --accent: #6366f1;
+      --accent-soft: rgba(99, 102, 241, 0.15);
+      --accent-strong: #4f46e5;
+      --accent-hover: #818cf8;
+      --danger: #ef4444;
+      --danger-soft: rgba(239, 68, 68, 0.15);
+      --text-main: #e5e7eb;
+      --text-muted: #9ca3af;
+      --chip-bg: rgba(148, 163, 184, 0.2);
+      --chip-border: rgba(148, 163, 184, 0.5);
+      --input-bg: rgba(15, 23, 42, 0.85);
+      --input-border: rgba(148, 163, 184, 0.4);
+      --input-border-focus: #6366f1;
+      --radius-lg: 16px;
+      --radius-xl: 20px;
+      --transition-fast: 0.15s ease-out;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
     body {
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       margin: 0;
+      min-height: 100vh;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text",
+        "Segoe UI", sans-serif;
+      background: var(--bg-gradient);
+      color: var(--text-main);
+      display: flex;
+      justify-content: center;
       padding: 1rem;
     }
-    h1 {
-      font-size: 1.4rem;
-      text-align: center;
-      margin-bottom: 0.5rem;
+
+    .app-shell {
+      width: 100%;
+      max-width: 960px;
+      margin: auto;
     }
-    .section {
-      border: 1px solid #ccc;
-      border-radius: 8px;
-      padding: 0.75rem;
+
+    header {
+      text-align: center;
       margin-bottom: 1rem;
     }
+
+    header h1 {
+      font-size: 1.8rem;
+      letter-spacing: 0.03em;
+      margin: 0;
+      background: linear-gradient(to right, #e5e7eb, #a5b4fc);
+      -webkit-background-clip: text;
+      color: transparent;
+    }
+
+    header p {
+      margin: 0.4rem 0 0;
+      font-size: 0.9rem;
+      color: var(--text-muted);
+    }
+
+    .section {
+      background: var(--card-bg);
+      border-radius: var(--radius-xl);
+      border: 1px solid var(--card-border);
+      box-shadow: var(--card-shadow);
+      padding: 0.9rem 0.9rem 1rem;
+      margin-bottom: 1rem;
+      backdrop-filter: blur(16px);
+    }
+
+    .section h2 {
+      font-size: 1rem;
+      margin: 0 0 0.6rem;
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      color: #e5e7eb;
+    }
+
+    .section h2 span.emoji {
+      font-size: 1.1rem;
+    }
+
     label {
       display: block;
-      font-size: 0.9rem;
-      margin-top: 0.4rem;
+      font-size: 0.85rem;
+      margin-top: 0.5rem;
+      color: var(--text-main);
     }
-    input, button {
+
+    label .small {
+      display: block;
+      margin-top: 0.15rem;
+    }
+
+    input[type="text"],
+    input[type="email"],
+    input[type="password"] {
+      width: 100%;
+      margin-top: 0.25rem;
+      padding: 0.5rem 0.6rem;
+      font-size: 0.9rem;
+      border-radius: 999px;
+      border: 1px solid var(--input-border);
+      background: var(--input-bg);
+      color: var(--text-main);
+      outline: none;
+      transition: border-color var(--transition-fast), box-shadow var(--transition-fast),
+        background-color var(--transition-fast), transform var(--transition-fast);
+    }
+
+    input[type="text"]:focus,
+    input[type="email"]:focus,
+    input[type="password"]:focus {
+      border-color: var(--input-border-focus);
+      box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.6);
+      transform: translateY(-1px);
+      background: #020617;
+    }
+
+    button {
+      display: inline-flex;
+      justify-content: center;
+      align-items: center;
+      gap: 0.35rem;
       width: 100%;
       box-sizing: border-box;
-      margin-top: 0.2rem;
-      padding: 0.4rem;
-      font-size: 1rem;
-    }
-    button {
+      margin-top: 0.4rem;
+      padding: 0.5rem 0.8rem;
+      font-size: 0.9rem;
+      border-radius: 999px;
+      border: none;
+      font-weight: 500;
+      color: white;
+      background: linear-gradient(to right, var(--accent), var(--accent-strong));
       cursor: pointer;
+      transition: transform var(--transition-fast), box-shadow var(--transition-fast),
+        background var(--transition-fast), opacity var(--transition-fast);
+      box-shadow: 0 10px 25px rgba(79, 70, 229, 0.4);
     }
+
+    button:hover:not(:disabled) {
+      transform: translateY(-1px);
+      background: linear-gradient(to right, var(--accent-hover), var(--accent));
+      box-shadow: 0 16px 35px rgba(79, 70, 229, 0.65);
+    }
+
+    button:active:not(:disabled) {
+      transform: translateY(0);
+      box-shadow: 0 6px 18px rgba(79, 70, 229, 0.55);
+    }
+
+    button:disabled {
+      opacity: 0.5;
+      cursor: default;
+      box-shadow: none;
+    }
+
+    .btn-secondary {
+      background: radial-gradient(circle at top, rgba(148, 163, 184, 0.15), #020617);
+      border: 1px solid rgba(148, 163, 184, 0.4);
+      color: var(--text-main);
+      box-shadow: 0 8px 22px rgba(15, 23, 42, 0.8);
+    }
+
+    .btn-secondary:hover:not(:disabled) {
+      background: radial-gradient(circle at top, rgba(148, 163, 184, 0.25), #020617);
+      box-shadow: 0 12px 30px rgba(15, 23, 42, 0.95);
+    }
+
+    .btn-danger {
+      background: linear-gradient(to right, #f97373, var(--danger));
+      box-shadow: 0 10px 25px rgba(248, 113, 113, 0.4);
+    }
+
     .small {
       font-size: 0.8rem;
-      color: #555;
+      color: var(--text-muted);
     }
+
     .badge {
-      display: inline-block;
-      background: #eee;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.2rem;
+      background: var(--chip-bg);
       border-radius: 999px;
-      padding: 0.1rem 0.5rem;
+      padding: 0.08rem 0.5rem;
       margin: 0.05rem;
       font-size: 0.75rem;
+      border: 1px solid var(--chip-border);
+      color: #e5e7eb;
     }
+
     .restaurant-item {
-      padding: 0.3rem 0;
-      border-bottom: 1px solid #eee;
+      padding: 0.4rem 0;
+      border-bottom: 1px dashed rgba(55, 65, 81, 0.6);
       display: flex;
       justify-content: space-between;
-      align-items: center;
-      gap: 0.5rem;
+      align-items: flex-start;
+      gap: 0.6rem;
       font-size: 0.9rem;
     }
+
     .restaurant-item:last-child {
       border-bottom: none;
     }
+
     .restaurant-name {
       font-weight: 600;
+      color: #e5e7eb;
     }
+
     .btn-row {
       display: flex;
       flex-direction: column;
       gap: 0.25rem;
       align-items: flex-end;
     }
+
     .small-btn {
       width: auto;
-      padding: 0.2rem 0.5rem;
+      padding: 0.25rem 0.55rem;
       font-size: 0.75rem;
     }
+
     #result {
       font-weight: 700;
       font-size: 1.1rem;
       text-align: center;
-      margin-top: 0.5rem;
+      margin-top: 0.7rem;
+      padding: 0.5rem 0.7rem;
+      border-radius: 999px;
+      background: var(--accent-soft);
+      color: #e5e7eb;
     }
+
     #currentGroupDisplay {
       font-size: 0.85rem;
-      color: #333;
-      margin-top: 0.3rem;
+      color: var(--text-muted);
+      margin-top: 0.5rem;
     }
+
     .auth-row {
       display: flex;
       align-items: center;
@@ -92,168 +259,244 @@
       flex-wrap: wrap;
       margin-top: 0.5rem;
     }
+
     .auth-row button {
       width: auto;
     }
+
     #authStatus {
       font-size: 0.85rem;
+      color: var(--text-muted);
     }
+
     #tagOptions, #peopleOptions, #filterTagOptions, #filterPeopleOptions {
-      margin-top: 0.3rem;
-      padding: 0.4rem;
-      border-radius: 6px;
-      background: #f8f8f8;
+      margin-top: 0.35rem;
+      padding: 0.45rem 0.5rem;
+      border-radius: 12px;
+      background: radial-gradient(circle at top left, rgba(15, 23, 42, 0.9), #020617);
+      border: 1px solid rgba(51, 65, 85, 0.8);
     }
+
     .tag-option, .person-option {
       display: inline-flex;
       align-items: center;
-      margin: 0.1rem 0.4rem 0.1rem 0;
+      margin: 0.1rem 0.45rem 0.1rem 0;
       font-size: 0.8rem;
+      color: #e5e7eb;
+      padding: 0.1rem 0.4rem;
+      border-radius: 999px;
+      cursor: pointer;
+      transition: background-color var(--transition-fast), border-color var(--transition-fast),
+        transform var(--transition-fast);
+      border: 1px solid transparent;
     }
+
     .tag-option input,
     .person-option input {
       width: auto;
       margin-right: 0.3rem;
       margin-top: 0;
+      accent-color: var(--accent);
     }
+
+    .tag-option:hover,
+    .person-option:hover {
+      background-color: rgba(148, 163, 184, 0.18);
+      border-color: rgba(148, 163, 184, 0.6);
+      transform: translateY(-0.5px);
+    }
+
     .import-row {
-      border-bottom: 1px solid #eee;
+      border-bottom: 1px dashed rgba(55, 65, 81, 0.7);
       padding: 0.5rem 0;
-      font-size: 0.85rem;
+      font-size: 0.8rem;
     }
+
+    .import-row:last-child {
+      border-bottom: none;
+    }
+
     .import-header {
       font-weight: 600;
       margin-bottom: 0.25rem;
+      color: #e5e7eb;
     }
-    .import-row label {
-      margin-top: 0.2rem;
+
+    .pill-heading {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      padding: 0.15rem 0.65rem;
+      border-radius: 999px;
+      background: rgba(37, 99, 235, 0.1);
+      border: 1px solid rgba(129, 140, 248, 0.7);
+      font-size: 0.75rem;
+      color: #c7d2fe;
+      margin-left: auto;
+    }
+
+    .section-header-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.5rem;
+    }
+
+    @media (min-width: 800px) {
+      .grid-2 {
+        display: grid;
+        grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.1fr);
+        gap: 1rem;
+      }
     }
   </style>
 </head>
 <body>
-  <h1>Random Restaurant Picker</h1>
+  <div class="app-shell">
+    <header>
+      <h1>Random Restaurant Picker</h1>
+      <p>Shareable groups, tags, people filters, and just enough chaos.</p>
+    </header>
 
-  <!-- Auth section -->
-  <div class="section">
-    <h2 style="font-size:1.1rem;margin:0 0 0.5rem;">Sign In</h2>
-    <div class="auth-row">
-      <button id="signInBtn">Sign in with Google</button>
-      <button id="signOutBtn" disabled>Sign out</button>
-      <span id="authStatus">Not signed in. You can view lists but must sign in to create and edit your own groups.</span>
+    <!-- Auth section -->
+    <div class="section">
+      <div class="section-header-row">
+        <h2><span class="emoji">🔐</span> Sign In</h2>
+        <div class="pill-heading">Firebase + Google Auth</div>
+      </div>
+      <div class="auth-row">
+        <button id="signInBtn" class="btn-secondary">Sign in with Google</button>
+        <button id="signOutBtn" class="btn-secondary" disabled>Sign out</button>
+        <span id="authStatus">Not signed in. You can view lists but must sign in to create and edit your own groups.</span>
+      </div>
     </div>
-  </div>
 
-  <!-- Group / List selection -->
-  <div class="section">
-    <h2 style="font-size:1.1rem;margin:0 0 0.5rem;">Group / List</h2>
-    <form id="groupForm">
-      <label>
-        Group ID (e.g. My Stuff)
-        <span class="small">
-          Everyone using the same Group ID shares the same list.
-          The first signed-in person to use a new ID becomes its owner.
-        </span>
-        <input type="text" id="groupInput" placeholder="my-stuff" required>
-      </label>
-      <button type="submit" style="margin-top:0.6rem;">Use this Group</button>
-    </form>
-    <div id="currentGroupDisplay"></div>
-  </div>
+    <!-- Group / List selection -->
+    <div class="section">
+      <div class="section-header-row">
+        <h2><span class="emoji">📂</span> Group / List</h2>
+        <div class="pill-heading">Each group is its own shared universe</div>
+      </div>
+      <form id="groupForm">
+        <label>
+          Group ID (e.g. My Stuff)
+          <span class="small">
+            Everyone using the same Group ID shares the same list.
+            The first signed-in person to use a new ID becomes its owner.
+          </span>
+          <input type="text" id="groupInput" placeholder="my-stuff" required>
+        </label>
+        <button type="submit" style="margin-top:0.6rem;">Use this Group</button>
+      </form>
+      <div id="currentGroupDisplay"></div>
+    </div>
 
-  <!-- Add / edit restaurant -->
-  <div class="section">
-    <h2 style="font-size:1.1rem;margin:0 0 0.5rem;">Add / Update Restaurant</h2>
-    <p class="small" id="editHint"></p>
-    <form id="addForm">
-      <label>
-        Restaurant name:
-        <input type="text" id="nameInput" required>
-      </label>
+    <div class="grid-2">
+      <!-- Add / edit restaurant -->
+      <div class="section">
+        <div class="section-header-row">
+          <h2><span class="emoji">🍽️</span> Add / Update Restaurant</h2>
+        </div>
+        <p class="small" id="editHint"></p>
+        <form id="addForm">
+          <label>
+            Restaurant name:
+            <input type="text" id="nameInput" required>
+          </label>
 
-      <label>
-        Tags (comma separated)
-        <span class="small">Example: Italian, cheap, date night</span>
-        <input type="text" id="tagsInput" placeholder="Italian, cheap, date night">
-      </label>
+          <label>
+            Tags (comma separated)
+            <span class="small">Example: Italian, cheap, date night</span>
+            <input type="text" id="tagsInput" placeholder="Italian, cheap, date night">
+          </label>
 
-      <div id="tagOptions" class="small">
-        <!-- tag checkboxes will be rendered here -->
+          <div id="tagOptions" class="small">
+            <!-- tag checkboxes will be rendered here -->
+          </div>
+
+          <label>
+            People who are ok with this (comma separated)
+            <span class="small">Example: John, Bob, Roommate</span>
+            <input type="text" id="peopleInput" placeholder="John, Bob, Roommate">
+          </label>
+
+          <div id="peopleOptions" class="small">
+            <!-- people checkboxes will be rendered here -->
+          </div>
+
+          <button type="submit" style="margin-top:0.6rem;">Save Restaurant</button>
+        </form>
       </div>
 
-      <label>
-        People who are ok with this (comma separated)
-        <span class="small">Example: John, Bob, Roommate</span>
-        <input type="text" id="peopleInput" placeholder="John, Bob, Roommate">
-      </label>
+      <!-- Filters + random pick -->
+      <div class="section">
+        <div class="section-header-row">
+          <h2><span class="emoji">🎲</span> Pick One</h2>
+        </div>
 
-      <div id="peopleOptions" class="small">
-        <!-- people checkboxes will be rendered here -->
+        <label>
+          People present (comma separated)
+          <span class="small">Only show places everyone here is ok with</span>
+          <input type="text" id="filterPeopleInput" placeholder="John, Bob, Roommate">
+        </label>
+
+        <div id="filterPeopleOptions" class="small">
+          <!-- filter people checkboxes -->
+        </div>
+
+        <label>
+          Required tags (comma separated)
+          <span class="small">Example: Italian, takeout</span>
+          <input type="text" id="filterTagsInput" placeholder="Italian">
+        </label>
+
+        <div id="filterTagOptions" class="small">
+          <!-- filter tag checkboxes -->
+        </div>
+
+        <button id="pickBtn" style="margin-top:0.6rem;">🎲 Pick Random Restaurant</button>
+        <div id="result"></div>
       </div>
-
-      <button type="submit" style="margin-top:0.6rem;">Save Restaurant</button>
-    </form>
-  </div>
-
-  <!-- Filters + random pick -->
-  <div class="section">
-    <h2 style="font-size:1.1rem;margin:0 0 0.5rem;">Pick One</h2>
-
-    <label>
-      People present (comma separated)
-      <span class="small">Only show places everyone here is ok with</span>
-      <input type="text" id="filterPeopleInput" placeholder="John, Bob, Roommate">
-    </label>
-
-    <div id="filterPeopleOptions" class="small">
-      <!-- filter people checkboxes -->
     </div>
 
-    <label>
-      Required tags (comma separated)
-      <span class="small">Example: Italian, takeout</span>
-      <input type="text" id="filterTagsInput" placeholder="Italian">
-    </label>
-
-    <div id="filterTagOptions" class="small">
-      <!-- filter tag checkboxes -->
+    <!-- Import from another group -->
+    <div class="section">
+      <div class="section-header-row">
+        <h2><span class="emoji">📥</span> Import from Another Group</h2>
+        <div class="pill-heading">Copy, don’t mutate</div>
+      </div>
+      <p class="small">
+        Want to borrow someone else's list without giving them write access? Enter their group ID,
+        load their restaurants, tweak tags/people, and import into your current group.
+      </p>
+      <form id="importForm">
+        <label>
+          Source Group ID (read-only)
+          <span class="small">Example: your-friend-group. You can see it if they tell you.</span>
+          <input type="text" id="importGroupInput" placeholder="friend-group-id" required>
+        </label>
+        <button type="submit" class="btn-secondary" style="margin-top:0.6rem;">Load Restaurants from Source Group</button>
+      </form>
+      <div id="importList" style="margin-top:0.5rem;"></div>
+      <button id="importSelectedBtn" class="btn-secondary" style="margin-top:0.6rem;" disabled>
+        Import Selected into My Current Group
+      </button>
+      <p class="small">
+        Importing makes copies into <strong>your</strong> group only. The source group is never changed.
+      </p>
     </div>
 
-    <button id="pickBtn" style="margin-top:0.6rem;">🎲 Pick Random Restaurant</button>
-    <div id="result"></div>
-  </div>
-
-  <!-- Import from another group -->
-  <div class="section">
-    <h2 style="font-size:1.1rem;margin:0 0 0.5rem;">Import from Another Group</h2>
-    <p class="small">
-      Want to borrow someone else's list without giving them write access? Enter their group ID,
-      load their restaurants, tweak tags/people, and import into your current group.
-    </p>
-    <form id="importForm">
-      <label>
-        Source Group ID (read-only)
-        <span class="small">Example: your-friend-group. You can see it if they tell you.</span>
-        <input type="text" id="importGroupInput" placeholder="friend-group-id" required>
-      </label>
-      <button type="submit" style="margin-top:0.6rem;">Load Restaurants from Source Group</button>
-    </form>
-    <div id="importList" style="margin-top:0.5rem;"></div>
-    <button id="importSelectedBtn" style="margin-top:0.6rem;" disabled>
-      Import Selected into My Current Group
-    </button>
-    <p class="small">
-      Importing makes copies into <strong>your</strong> group only. The source group is never changed.
-    </p>
-  </div>
-
-  <!-- List of restaurants -->
-  <div class="section">
-    <h2 style="font-size:1.1rem;margin:0 0 0.5rem;">Saved Restaurants for This Group</h2>
-    <div id="list"></div>
-    <p class="small">
-      Data is stored in Firebase Firestore, per Group ID.
-      Anyone can view any group if they know its name. Only the group owner can edit that group.
-    </p>
+    <!-- List of restaurants -->
+    <div class="section">
+      <div class="section-header-row">
+        <h2><span class="emoji">📋</span> Saved Restaurants for This Group</h2>
+      </div>
+      <div id="list"></div>
+      <p class="small">
+        Data is stored in Firebase Firestore, per Group ID.
+        Anyone can view any group if they know its name. Only the group owner can edit that group.
+      </p>
+    </div>
   </div>
 
   <!-- Firebase + app logic -->
@@ -591,7 +834,7 @@
 
         const editBtn = document.createElement('button');
         editBtn.textContent = '✏️ Edit';
-        editBtn.className = 'small-btn';
+        editBtn.className = 'small-btn btn-secondary';
         editBtn.disabled = !hasWriteAccess();
         editBtn.title = hasWriteAccess()
           ? 'Edit this restaurant'
@@ -614,7 +857,7 @@
 
         const delBtn = document.createElement('button');
         delBtn.textContent = 'Delete';
-        delBtn.className = 'small-btn';
+        delBtn.className = 'small-btn btn-danger';
         delBtn.disabled = !hasWriteAccess();
         delBtn.title = hasWriteAccess()
           ? 'Delete this restaurant'
@@ -979,6 +1222,7 @@
       }
       updateEditHint();
       await loadGroupAndRestaurants();
+      renderImportList();
     });
 
     // --- Group selection ---
