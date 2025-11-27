@@ -79,10 +79,33 @@
       color: #333;
       margin-top: 0.3rem;
     }
+    .auth-row {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+      margin-top: 0.5rem;
+    }
+    .auth-row button {
+      width: auto;
+    }
+    #authStatus {
+      font-size: 0.85rem;
+    }
   </style>
 </head>
 <body>
   <h1>Random Restaurant Picker</h1>
+
+  <!-- Auth section -->
+  <div class="section">
+    <h2 style="font-size:1.1rem;margin:0 0 0.5rem;">Sign In</h2>
+    <div class="auth-row">
+      <button id="signInBtn">Sign in with Google</button>
+      <button id="signOutBtn" disabled>Sign out</button>
+      <span id="authStatus">Not signed in. You can view lists but must sign in to edit.</span>
+    </div>
+  </div>
 
   <!-- Group / Family selection -->
   <div class="section">
@@ -103,6 +126,7 @@
   <!-- Add restaurant -->
   <div class="section">
     <h2 style="font-size:1.1rem;margin:0 0 0.5rem;">Add / Update Restaurant</h2>
+    <p class="small" id="editHint"></p>
     <form id="addForm">
       <label>
         Restaurant name:
@@ -151,13 +175,13 @@
     <div id="list"></div>
     <p class="small">
       Data is stored in Firebase Firestore, per Group ID.
-      Anyone with the same Group ID sees the same list.
+      Anyone with the link can view; only signed-in users can edit.
     </p>
   </div>
 
   <!-- Firebase + app logic -->
   <script type="module">
-    // Import Firebase from CDN (modular SDK) :contentReference[oaicite:2]{index=2}
+    // ---- Firebase imports (CDN modular SDK) ----
     import { initializeApp } from 'https://www.gstatic.com/firebasejs/12.6.0/firebase-app.js';
     import {
       getFirestore,
@@ -167,6 +191,13 @@
       getDocs,
       deleteDoc
     } from 'https://www.gstatic.com/firebasejs/12.6.0/firebase-firestore.js';
+    import {
+      getAuth,
+      GoogleAuthProvider,
+      signInWithPopup,
+      signOut,
+      onAuthStateChanged
+    } from 'https://www.gstatic.com/firebasejs/12.6.0/firebase-auth.js';
 
     const firebaseConfig = {
       apiKey: "AIzaSyC2xQS-opDsHikzS2DQyCZ7MNIlquENrPY",
@@ -176,13 +207,21 @@
       messagingSenderId: "1000330063502",
       appId: "1:1000330063502:web:a307f6354e0fee2960a3df"
     };
-
+    
 
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
+    const auth = getAuth(app);
+    const provider = new GoogleAuthProvider();
 
     let currentGroupId = null;
     let restaurants = []; // in-memory cache for current group
+    let currentUser = null;
+
+    const authStatusEl = document.getElementById('authStatus');
+    const signInBtn = document.getElementById('signInBtn');
+    const signOutBtn = document.getElementById('signOutBtn');
+    const editHintEl = document.getElementById('editHint');
 
     // --- Helpers ---
 
@@ -201,6 +240,14 @@
         div.textContent = 'No group selected yet.';
       } else {
         div.textContent = 'Current group: ' + currentGroupId;
+      }
+    }
+
+    function updateEditHint() {
+      if (!currentUser) {
+        editHintEl.textContent = 'You are not signed in. You can still view restaurants, but must sign in to add or delete.';
+      } else {
+        editHintEl.textContent = 'Signed in as ' + (currentUser.displayName || currentUser.email) + '. You can add or delete restaurants.';
       }
     }
 
@@ -248,9 +295,17 @@
         const delBtn = document.createElement('button');
         delBtn.textContent = 'Delete';
         delBtn.className = 'delete-btn';
+        delBtn.disabled = !currentUser;
+        delBtn.title = currentUser ? 'Delete this restaurant' : 'Sign in to delete';
+
         delBtn.addEventListener('click', async () => {
+          if (!currentUser) {
+            alert('You must be signed in to delete.');
+            return;
+          }
           await deleteRestaurant(r.id);
         });
+
         item.appendChild(delBtn);
 
         listDiv.appendChild(item);
@@ -288,6 +343,11 @@
     }
 
     async function saveRestaurantToFirestore(name, tags, people) {
+      if (!currentUser) {
+        alert('You must be signed in to add or update restaurants.');
+        return;
+      }
+
       const colRef = groupRestaurantsCollection();
       if (!colRef) {
         alert('Select a Group ID first.');
@@ -309,6 +369,10 @@
     }
 
     async function deleteRestaurant(id) {
+      if (!currentUser) {
+        alert('You must be signed in to delete restaurants.');
+        return;
+      }
       const colRef = groupRestaurantsCollection();
       if (!colRef) return;
       const docRef = doc(colRef, id);
@@ -316,7 +380,42 @@
       await loadRestaurantsFromFirestore();
     }
 
-    // --- Event handlers ---
+    // --- Auth handlers ---
+
+    signInBtn.addEventListener('click', async () => {
+      try {
+        await signInWithPopup(auth, provider);
+        // onAuthStateChanged will handle UI updates
+      } catch (err) {
+        console.error('Sign-in error:', err);
+        alert('Sign-in failed: ' + (err.message || err));
+      }
+    });
+
+    signOutBtn.addEventListener('click', async () => {
+      try {
+        await signOut(auth);
+      } catch (err) {
+        console.error('Sign-out error:', err);
+      }
+    });
+
+    onAuthStateChanged(auth, (user) => {
+      currentUser = user;
+      if (user) {
+        authStatusEl.textContent = 'Signed in as ' + (user.displayName || user.email);
+        signInBtn.disabled = true;
+        signOutBtn.disabled = false;
+      } else {
+        authStatusEl.textContent = 'Not signed in. You can view lists but must sign in to edit.';
+        signInBtn.disabled = false;
+        signOutBtn.disabled = true;
+      }
+      updateEditHint();
+      renderList(); // refresh delete button enabled/disabled state
+    });
+
+    // --- Group selection ---
 
     document.getElementById('groupForm').addEventListener('submit', async (event) => {
       event.preventDefault();
@@ -330,12 +429,13 @@
         .replace(/[^a-z0-9]+/g, '-')
         .replace(/^-|-$/g, '');
 
-      // Optionally remember on this device
       localStorage.setItem('rrp_currentGroupId', currentGroupId);
 
       setCurrentGroupDisplay();
       await loadRestaurantsFromFirestore();
     });
+
+    // --- Add restaurant form ---
 
     document.getElementById('addForm').addEventListener('submit', async (event) => {
       event.preventDefault();
@@ -343,7 +443,6 @@
         alert('Select a Group ID first.');
         return;
       }
-
       const nameInput = document.getElementById('nameInput');
       const tagsInput = document.getElementById('tagsInput');
       const peopleInput = document.getElementById('peopleInput');
@@ -358,6 +457,8 @@
 
       nameInput.value = '';
     });
+
+    // --- Random picker ---
 
     document.getElementById('pickBtn').addEventListener('click', () => {
       const resultDiv = document.getElementById('result');
@@ -399,19 +500,17 @@
       resultDiv.textContent = '🎉 Tonight you\'re going to: ' + chosen.name;
     });
 
-    // --- On page load: restore last group (if any) ---
+    // --- Init: restore last group ---
 
     (async function init() {
       const savedGroup = localStorage.getItem('rrp_currentGroupId');
       if (savedGroup) {
         currentGroupId = savedGroup;
         document.getElementById('groupInput').value = savedGroup;
-        setCurrentGroupDisplay();
-        await loadRestaurantsFromFirestore();
-      } else {
-        setCurrentGroupDisplay();
-        renderList();
       }
+      setCurrentGroupDisplay();
+      updateEditHint();
+      await loadRestaurantsFromFirestore();
     })();
   </script>
 </body>
