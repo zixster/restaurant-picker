@@ -434,29 +434,24 @@
           <h2><span class="emoji">🎲</span> Pick One</h2>
         </div>
 
-        <label>
-          People present (comma separated)
-          <span class="small">Only show places everyone here is ok with</span>
-          <input type="text" id="filterPeopleInput" placeholder="John, Bob, Roommate">
-        </label>
+        <p class="small" style="margin-top:0;">
+          Tap who is here and which tags you care about. We’ll only pick places that match.
+        </p>
 
-        <div id="filterPeopleOptions" class="small">
+        <div id="filterPeopleOptions" class="small" style="margin-top:0.5rem;">
           <!-- filter people checkboxes -->
         </div>
 
-        <label>
-          Required tags (comma separated)
-          <span class="small">Example: Italian, takeout</span>
-          <input type="text" id="filterTagsInput" placeholder="Italian">
-        </label>
+        <div style="height:0.6rem;"></div>
 
         <div id="filterTagOptions" class="small">
           <!-- filter tag checkboxes -->
         </div>
 
-        <button id="pickBtn" style="margin-top:0.6rem;">🎲 Pick Random Restaurant</button>
+        <button id="pickBtn" style="margin-top:0.8rem;">🎲 Pick Random Restaurant</button>
         <div id="result"></div>
       </div>
+
     </div>
 
     <!-- Import from another group -->
@@ -1301,20 +1296,14 @@
         return;
       }
 
-      const filterPeopleStr = document.getElementById('filterPeopleInput').value;
-      const filterTagsStr = document.getElementById('filterTagsInput').value;
-
-      const typedFilterPeople = normalizeList(filterPeopleStr);
-      const checkedFilterPeople = Array.from(
+      // Only use what is checked
+      const requiredPeople = Array.from(
         document.querySelectorAll('#filterPeopleOptions input[type="checkbox"]:checked')
       ).map(cb => cb.value.toLowerCase());
-      const requiredPeople = Array.from(new Set([...typedFilterPeople, ...checkedFilterPeople]));
 
-      const typedFilterTags = normalizeList(filterTagsStr);
-      const checkedFilterTags = Array.from(
+      const requiredTags = Array.from(
         document.querySelectorAll('#filterTagOptions input[type="checkbox"]:checked')
       ).map(cb => cb.value.toLowerCase());
-      const requiredTags = Array.from(new Set([...typedFilterTags, ...checkedFilterTags]));
 
       const eligible = restaurants.filter(r => {
         const rPeople = r.people.map(p => p.toLowerCase());
@@ -1341,6 +1330,7 @@
 
       resultDiv.textContent = '🎉 Tonight you\'re going to: ' + chosen.name;
     });
+
 
     // --- Init: restore last group ---
 
